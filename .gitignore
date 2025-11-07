@@ -1,49 +1,72 @@
-# History files
-.Rhistory
-.Rapp.history
+# Set working directory
+setwd("C:/Users/Emma Tergunwa/Desktop/EMADA")
+getwd()
 
-# Session Data files
-.RData
-.RDataTmp
+# Load necessary libraries
+library(readr)
+library(ggplot2)
+library(haven)
+library(haven)
+library(broom)
+library(devtools)
+library(modelsummary)
+library(cli)
+library(texreg)
+library(tinytex)
+library(dplyr)
 
-# User-specific files
-.Ruserdata
+# Load the data
+washington <- read_csv("C:/Users/Emma Tergunwa/Desktop/ESTHER/ASSIGNMENT2/washington.csv")
+head(washington)
 
-# Example code in package build process
-*-Ex.R
+# check the dimension of the data
+dim(washington)
 
-# Output files from R CMD build
-/*.tar.gz
+# Create subset (Democrats & Republicans only)
+washington_sub <- subset(washington, party %in% c(1, 2))
 
-# Output files from R CMD check
-/*.Rcheck/
+# Recode party labels
+washington_sub$party <- factor(washington_sub$party,
+                               levels = c(1, 2),
+                               labels = c("Democrat", "Republican"))
 
-# RStudio files
-.Rproj.user/
+# (a)  Comparing family size by party (Keep only Democrats and Republicans)
+aggregate(totchi ~ party, data = washington_sub, mean)
+t.test(totchi ~ party, data = washington_sub)
 
-# produced vignettes
-vignettes/*.html
-vignettes/*.pdf
+# (b) run the regression model for aauw on ngirls
+model1 <- lm(aauw ~ ngirls, data = washington)
+summary(model1)
 
-# OAuth2 token, see https://github.com/hadley/httr/releases/tag/v0.3
-.httr-oauth
+# (c) run the regression of aauw scores on ngirls and totchi(Adding total number of children)
+model2 <- lm(aauw ~ ngirls + totchi, data = washington)
+summary(model2)
 
-# knitr and R markdown default cache directories
-*_cache/
-/cache/
+# (d) Adding party fixed effects
+model3 <- lm(aauw ~ ngirls + totchi + party, data = washington_sub)
+summary(model3)
 
-# Temporary files created by R markdown
-*.utf8.md
-*.knit.md
+# (e) Separate regressions by party and plotting coefficients
+full_mod <- lm(aauw ~ ngirls + totchi, data = washington_sub)
+dem_mod  <- lm(aauw ~ ngirls + totchi, data = subset(washington_sub, party == "Democrat"))
+rep_mod  <- lm(aauw ~ ngirls + totchi, data = subset(washington_sub, party == "Republican"))
 
-# R Environment Variables
-.Renviron
+# Combine model results with confidence intervals
+results <- bind_rows(
+  tidy(full_mod, conf.int = TRUE) %>% mutate(group = "Full Sample"),
+  tidy(dem_mod, conf.int = TRUE) %>% mutate(group = "Democrats"),
+  tidy(rep_mod, conf.int = TRUE) %>% mutate(group = "Republicans")
+)
 
-# pkgdown site
-docs/
+# Filter only the coefficient for ngirls
+results_ngirls <- filter(results, term == "ngirls")
 
-# translation temp files
-po/*~
 
-# RStudio Connect folder
-rsconnect/
+# combined and plot
+ggplot(results_ngirls, aes(x = group, y = estimate)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.15) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(title = "Effect of Number of Daughters on AAUW Score",
+       x = "Sample", y = "Coefficient on Number of Daughters (ngirls)") +
+  theme_minimal()
